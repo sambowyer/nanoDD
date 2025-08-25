@@ -36,6 +36,18 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 import configs
 
+import wandb
+
+## CHANGE THESE TO YOUR OWN WANDB ENTITY AND PROJECT
+WANDB_ENTITY = "sam-bowyer-bristol"
+WANDB_PROJECT = "nanoDD"
+
+## CHANGE THESE PATHS TO YOUR OWN
+SCRATCH = Path("/user/work/dg22309/discrete_diffusion/nanoDD")
+os.environ["HF_HOME"] = str("/user/work/dg22309/huggingface")
+
+print(f"Starting training at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
 # -----------------------------------------------------------------------------
 # load model class, model and training config
 
@@ -57,8 +69,7 @@ model_cls, model_args, training_args = getattr(configs, args.config)()
 # model-specific values for these go in configs.py, which over-ride values below
 
 log_to_stdout = True
-log_to_neptune = False
-neptune_project = None
+log_to_wandb = True
 training_seed = 73311337
 
 # I/O & eval
@@ -229,16 +240,16 @@ torch.backends.cudnn.benchmark = True
 device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.autocast
 
 # set up logging and saving
-if log_to_neptune and master_process:
-    import neptune
-
-    run = neptune.init_run(project=neptune_project, source_files="*.py")
-    run["model_cls"] = model_cls.__name__
-    run["model_args"] = model_args
-    run["training_args"] = training_args
-    run["total_batch_size"] = batch_size * ddp_world_size * gradient_accumulation_steps
-    run["DET_EXP_ID"] = os.getenv("DET_EXPERIMENT_ID")
-    out_dir = out_dir / run['sys/id'].fetch()
+if log_to_wandb and master_process:
+    run_name = f"{model_cls.__name__}_{args.config}"
+    wandb_config = {
+        "model_cls": model_cls.__name__,
+        "model_args": model_args,
+        "training_args": training_args,
+        "total_batch_size": batch_size * ddp_world_size * gradient_accumulation_steps,
+    }
+    run = wandb.init(project=WANDB_PROJECT, entity=WANDB_ENTITY, name=run_name, resume="allow", config=wandb_config)
+    out_dir = out_dir / run.id
 
 else:
     from datetime import datetime
@@ -358,15 +369,18 @@ while True:
         if log_to_stdout:
             metrics_repr = " | ".join([f"{k} {v:.5f}" for k, v in metrics.items()])
             print(f"iter {iter_num + 1}: loss {lossf:.5f}, {metrics_repr}, time {dt * 1000:.2f}ms")
-        if log_to_neptune:
-            run["lr"].log(lr, step=iter_num + 1)
-            run["metrics/train/loss"].log(lossf, step=iter_num + 1)
-            for k, v in metrics.items():
-                run[f"metrics/train/{k}"].log(v, step=iter_num + 1)
+        if log_to_wandb:
             param_norm = sum([p.data.norm().item() ** 2 for p in model.parameters() if p.requires_grad]) ** 0.5
-            run["metrics/train/grad_norm"].log(grad_norm.item(), step=iter_num + 1)
-            run["metrics/train/param_norm"].log(param_norm, step=iter_num + 1)
-            run["metrics/train/step_time"].log(dt, step=iter_num + 1)
+            wandb_stats = {
+                "train/lr": lr,
+                "train/loss": lossf,
+                "train/grad_norm": grad_norm.item(),
+                "train/param_norm": param_norm,
+                "train/step_time": dt,
+            }
+            for k, v in metrics.items():
+                wandb_stats[f"train/{k}"] = v
+            wandb.log(wandb_stats, step=iter_num + 1)
 
     ema.update()
     iter_num += 1  # inc true num of "completed" iterations
@@ -380,10 +394,13 @@ while True:
         metrics_repr = " | ".join([f"{k} " + f"{v:.5f}" for k, v in metrics.items()])
         print(f"val @ {iter_num} updates: loss {val_loss:.4f}, {metrics_repr}\n")
 
-        if log_to_neptune:
-            run["metrics/val/loss"].log(val_loss, step=iter_num)
+        if log_to_wandb:
+            wandb_stats = { 
+                "val/loss": val_loss,
+            }
             for k, v in metrics.items():
-                run[f"metrics/val/{k}"].log(v, step=iter_num)
+                wandb_stats[f"val/{k}"] = v
+            wandb.log(wandb_stats, step=iter_num)
 
         # save checkpoint
         if metrics[eval_key] < best_val_loss or always_save_checkpoint:
@@ -401,13 +418,22 @@ while True:
                     "best_val_loss": best_val_loss,
                 }
                 print(f"saving checkpoint to {out_dir}")
+                out_dir.mkdir(parents=True, exist_ok=True) # make sure out_dir exists
                 torch.save(checkpoint, out_dir / "ckpt.pt")
                 print("checkpoint created")
 
-    # termination conditions
     if iter_num >= max_iters:
+        # termination conditions
         print(f"training complete at {iter_num} iterations.")
+        print(f"best val loss: {best_val_loss}")
+        print(f"Train loss: {lossf}")
+        # print cuda memory usage
+        print(f"CUDA memory usage: {torch.cuda.memory_summary(device=device)}")
+        if log_to_wandb and master_process:
+            wandb.finish()
         break
 
 if ddp:
     destroy_process_group()
+
+print(f"Finished at {time.strftime('%Y-%m-%d %H:%M:%S')}")

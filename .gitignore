@@ -1,5 +1,18 @@
 .git
 .idea
-.pt
-.ckpt
-.npy
+*.pt
+*.ckpt
+*.npy
+*.o
+
+__pycache__/
+
+# datasets
+text8/
+
+# wandb
+wandb/
+
+# logs
+logs/
+

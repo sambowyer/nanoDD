@@ -1,0 +1,19 @@
+name: diffusion
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - einops>=0.7.0
+    - ema-pytorch==0.6.0
+    - fire
+    - numpy==1.26.4
+    - wandb
+    - torch>=2.2.1
+    - tiktoken
+    - tqdm 
+    - safetensors
+    - accelerate
+    - transformers
+    - datasets

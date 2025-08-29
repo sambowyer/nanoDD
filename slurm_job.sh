@@ -19,6 +19,17 @@ TIME=96
 #         --conda-env diffusion \
 #         --cmd "python -u train.py d3pm_text8"
 
+# lbatch  -c $NUM_CPU \
+#         -g 2 \
+#         --gputype $gpu_type \
+#         -m $mem \
+#         -t $TIME \
+#         -a $code \
+#         -q $partition \
+#         -n d3pm_text8_2gpu \
+#         --conda-env diffusion \
+#         --cmd "python -u train.py text8_2gpu --model-type d3pm"
+                                
 lbatch  -c $NUM_CPU \
         -g 2 \
         --gputype $gpu_type \
@@ -26,7 +37,6 @@ lbatch  -c $NUM_CPU \
         -t $TIME \
         -a $code \
         -q $partition \
-        -n d3pm_text8_2gpu \
+        -n md4_text8_2gpu \
         --conda-env diffusion \
-        --cmd "python -u train.py d3pm_text8_2gpu"
-                                
+        --cmd "python -u train.py text8_2gpu --model-type md4"

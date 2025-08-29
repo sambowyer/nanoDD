@@ -1,7 +1,8 @@
 from d3pm_absorbing import D3PMAbsorbing
+from md4 import MD4
 
 
-def d3pm_text8():
+def text8(model_type="d3pm"):
     model_args = dict(
         vocab_size=27,
         n_embed=768,
@@ -10,8 +11,15 @@ def d3pm_text8():
         n_cond=128,
         dropout=0.025,
         T=1000,
-        lambda_ce=0.05,
     )
+    if model_type == "d3pm":
+        model_cls = D3PMAbsorbing
+        model_args["lambda_ce"] = 0.05
+    elif model_type == "md4":
+        model_cls = MD4
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+    
     training_args = dict(
         batch_size=256,
         learning_rate=1e-3,
@@ -24,22 +32,22 @@ def d3pm_text8():
         weight_decay=0.1,
         training_seed=1,
     )
-    return D3PMAbsorbing, model_args, training_args
+    return model_cls, model_args, training_args
 
-def d3pm_text8_2gpu():
-    model, model_args, training_args = d3pm_text8()
+def text8_2gpu(model_type="d3pm"):
+    model, model_args, training_args = text8(model_type)
     training_args["gradient_accumulation_steps"] = 2
     training_args["eval_iters"] = 500
     return model, model_args, training_args
 
-def d3pm_text8_4gpu():
-    model, model_args, training_args = d3pm_text8()
+def text8_4gpu(model_type="d3pm"):
+    model, model_args, training_args = text8(model_type)
     training_args["gradient_accumulation_steps"] = 1
     training_args["eval_iters"] = 250
     return model, model_args, training_args
 
 
-def d3pm_openwebtext_8gpu():
+def openwebtext_8gpu(model_type="d3pm"):
     model_args = dict(
         vocab_size=50257,
         n_embed=768,
@@ -48,8 +56,16 @@ def d3pm_openwebtext_8gpu():
         n_cond=128,
         dropout=0.0,
         T=1000,
-        lambda_ce=0.05,
     )
+    if model_type == "d3pm":
+        model_cls = D3PMAbsorbing
+        model_args["lambda_ce"] = 0.05
+    elif model_type == "md4":
+        model_cls = MD4
+        
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+    
     training_args = dict(
         dataset="openwebtext",
         batch_size=16,
@@ -63,11 +79,11 @@ def d3pm_openwebtext_8gpu():
         weight_decay=0.1,
         training_seed=9,
     )
-    return D3PMAbsorbing, model_args, training_args
+    return model_cls, model_args, training_args
 
 
-def d3pm_openwebtext_32gpu():
-    model, model_args, training_args = d3pm_openwebtext_8gpu()
+def openwebtext_32gpu(model_type="d3pm"):
+    model, model_args, training_args = openwebtext_8gpu(model_type)
     training_args["gradient_accumulation_steps"] = 2
     training_args["eval_iters"] = 50
     return model, model_args, training_args

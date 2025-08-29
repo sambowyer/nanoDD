@@ -5,16 +5,20 @@ This training script can be run both on a single gpu in debug mode,
 and also in a larger training run with distributed data parallel (ddp).
 
 To run on a single GPU, example:
-$ python train.py d3pm_text8
+$ python train.py text8 --model-type d3pm
+$ python train.py text8 --model-type md4
 
 To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=8 train.py d3pm_text8_4gpu
+$ torchrun --standalone --nproc_per_node=8 train.py text8_4gpu --model-type d3pm
+$ torchrun --standalone --nproc_per_node=8 train.py text8_4gpu --model-type md4
 
 To run with DDP on 8 gpus across 2 nodes, example:
 - Run on the first (master) node with example IP 123.456.123.456:
-$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py d3pm_text8_4gpu
+$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py text8_4gpu --model-type d3pm
+$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py text8_4gpu --model-type md4
 - Run on the worker node:
-$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py d3pm_text8_4gpu
+$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py text8_4gpu --model-type d3pm
+$ torchrun --nproc_per_node=4 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py text8_4gpu --model-type md4
 (If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
 """
 
@@ -58,11 +62,18 @@ parser.add_argument(
     choices=[k for (k, v) in getmembers(configs, isfunction)],
     help="config function name in config.py",
 )
+parser.add_argument(
+    "--model-type",
+    type=str,
+    choices=["d3pm", "md4"],
+    default="d3pm",
+    help="Type of model to train: d3pm or md4",
+)
 parser.add_argument('--no-compile', action='store_false', dest='compile', help='Disable torch.compile')
 args = parser.parse_args()
 
-print(f"importing model and cfg: {args.config}")
-model_cls, model_args, training_args = getattr(configs, args.config)()
+print(f"importing model and cfg: {args.config} with model type: {args.model_type}")
+model_cls, model_args, training_args = getattr(configs, args.config)(args.model_type)
 
 # -----------------------------------------------------------------------------
 # default training config with overrides from model-specific values at the end
@@ -241,9 +252,10 @@ device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.au
 
 # set up logging and saving
 if log_to_wandb and master_process:
-    run_name = f"{model_cls.__name__}_{args.config}"
+    run_name = f"{args.model_type}_{args.config}"
     wandb_config = {
         "model_cls": model_cls.__name__,
+        "model_type": args.model_type,
         "model_args": model_args,
         "training_args": training_args,
         "total_batch_size": batch_size * ddp_world_size * gradient_accumulation_steps,

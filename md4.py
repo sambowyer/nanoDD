@@ -78,17 +78,17 @@ class MD4(nn.Module):
         x_t = D.Categorical(probs=q_x_t_given_x_0).sample() # [B, L]
 
         # 2. Predict x_0 from x_t using the neural network
-        log_predicted_x_0 = self.net(x_t, t.float())
+        logits_predicted_x_0 = self.net(x_t, t.float())
         # Set probability of absorbing state to 0 (as in D3PM)
-        log_predicted_x_0[:, :, -1] = -float("inf")
-        # predicted_x_0 = F.softmax(log_predicted_x_0, dim=-1) # [B, L, V]
+        logits_predicted_x_0[:, :, -1] = -float("inf")
+        log_predicted_x_0 = F.log_softmax(logits_predicted_x_0, dim=-1) # [B, L, V]
 
         # 3. Compute diffusion loss: alpha'_t/(1-alpha_t) * x_0 * log_pred_x_0 (weighted CE between x_0 and predicted_x_0)
-        alpha_prime_t = (self.alpha_bars[t-1] - self.alpha_bars[t]) / (1 - self.alpha_bars[t])
+        alpha_prime_t = (self.alpha_bars[t] - self.alpha_bars[t-1]) / (1 / self.T)
         masks = x_t == self.K - 1 # absorbing state
 
-        diffusion_loss = ((alpha_prime_t / (1 - self.alpha_bars[t]))[:, None, None] * onehot(data, self.K) * log_predicted_x_0 * masks[:,:,None])[:,:,:-1].sum(dim=(-1,-2)) # [B]
-        diffusion_loss = diffusion_loss.mean()
+        diffusion_loss = (alpha_prime_t / (1 - self.alpha_bars[t])) * (onehot(data, self.K) * log_predicted_x_0 * masks[:,:,None])[:,:,:-1].sum(dim=(-1,-2)) # [B]
+        diffusion_loss = diffusion_loss.mean() / x_t.shape[1]
 
         # 4. Add reconstruction and prior loss (constants)
         loss = diffusion_loss + self.recon_loss + self.prior_loss

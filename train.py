@@ -69,11 +69,18 @@ parser.add_argument(
     default="d3pm",
     help="Type of model to train: d3pm or md4",
 )
+parser.add_argument(
+    "--run_length",
+    type=str,
+    choices=["short", "long"],
+    default="short",
+    help="Length of run: short or long",
+)
 parser.add_argument('--no-compile', action='store_false', dest='compile', help='Disable torch.compile')
 args = parser.parse_args()
 
 print(f"importing model and cfg: {args.config} with model type: {args.model_type}")
-model_cls, model_args, training_args = getattr(configs, args.config)(args.model_type)
+model_cls, model_args, training_args = getattr(configs, args.config)(args.model_type, args.run_length)
 
 # -----------------------------------------------------------------------------
 # default training config with overrides from model-specific values at the end
@@ -252,10 +259,11 @@ device_type = "cuda" if "cuda" in device else "cpu"  # for later use in torch.au
 
 # set up logging and saving
 if log_to_wandb and master_process:
-    run_name = f"{args.model_type}_{args.config}"
+    run_name = f"{args.model_type}_{args.config}_{args.run_length}"
     wandb_config = {
         "model_cls": model_cls.__name__,
         "model_type": args.model_type,
+        "run_length": args.run_length,
         "model_args": model_args,
         "training_args": training_args,
         "total_batch_size": batch_size * ddp_world_size * gradient_accumulation_steps,
@@ -440,7 +448,7 @@ while True:
         print(f"best val loss: {best_val_loss}")
         print(f"Train loss: {lossf}")
         # print cuda memory usage
-        print(f"CUDA memory usage: {torch.cuda.memory_summary(device=device)}")
+        print(f"CUDA memory usage: \n{torch.cuda.memory_summary(device=device)}")
         if log_to_wandb and master_process:
             wandb.finish()
         break
